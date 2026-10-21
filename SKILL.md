@@ -49,6 +49,7 @@ Strong signals include:
 - a build, test, lint, formatting, or deployment command changed;
 - architecture or important directory boundaries changed;
 - a new framework, package manager, runtime, or major tool changes how work is performed;
+- database, data model, or API schema changes that affect implementation patterns, interfaces, or workflows;
 - repository-wide coding or testing conventions changed;
 - generated, vendored, protected, or otherwise special files changed;
 - validation requirements changed;
