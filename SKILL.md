@@ -94,11 +94,13 @@ If it did not change, say that the repository changes did not alter durable agen
 - Never invent commands, paths, conventions, or architectural rules.
 - Never turn `AGENTS.md` into a running changelog.
 - Prefer repository evidence over assumptions.
+- Treat explicit human-authored instructions as higher-confidence than inferred conventions. If repository evidence conflicts with them, surface the conflict rather than silently overriding them.
 - Preserve stable instructions unless there is evidence they are stale.
+- Do not duplicate information that agents can reliably discover from the repository unless recording it prevents a recurring mistake or materially changes agent behavior.
 - Keep guidance scoped to the directory where it applies.
 - Favor small, reviewable edits over broad rewrites.
 - Avoid timestamps or volatile details unless they are operationally necessary.
 
 ## Success criteria
 
-The skill succeeds when a future agent can trust `AGENTS.md` to reflect the repository's current operating constraints without being distracted by transient history or unnecessary documentation churn.
+The skill succeeds when `AGENTS.md` remains accurate as the repository evolves, contains the durable guidance future agents need, preserves intentional human guidance, removes or corrects stale instructions, and avoids unnecessary edits when repository changes do not affect agent behavior.
