@@ -26,11 +26,12 @@ Examples include:
 - architecture or directory structure changes;
 - new or changed build, test, lint, or deployment commands;
 - dependency or tooling changes that affect development;
+- database, data model, or API schema changes that affect implementation patterns or workflows;
 - new coding conventions or repository-wide patterns;
 - changes to generated files or files agents should avoid editing;
 - new validation requirements or important workflow constraints.
 
-A normal code change does **not** automatically justify changing `AGENTS.md`.
+A normal code change or one-off migration does **not** automatically justify changing `AGENTS.md`. Schema changes should trigger an update only when they create durable guidance future agents need.
 
 ## Core principle
 
