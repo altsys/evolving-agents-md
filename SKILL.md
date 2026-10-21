@@ -9,9 +9,9 @@ Keep `AGENTS.md` trustworthy as the repository evolves.
 
 ## Goal
 
-Update `AGENTS.md` when repository changes alter information an agent needs in order to work correctly, safely, or efficiently.
+Continuously evaluate repository changes for information that affects how agents should work, and keep `AGENTS.md` aligned with that evolving reality.
 
-Do not update it merely because code changed.
+Do not update it merely because code changed. Update it only when a change creates, modifies, or invalidates durable guidance future agents need.
 
 ## Working model
 
