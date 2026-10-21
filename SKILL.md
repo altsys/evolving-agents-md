@@ -27,7 +27,7 @@ When the user explicitly asks to update, refresh, reconcile, or check `AGENTS.md
 
 If the user supplies a commit, tag, branch, or other valid Git ref as the baseline, use it.
 
-If no baseline is supplied, use Git history to identify a useful comparison point. Do not assume that the most recent edit to `AGENTS.md` proves that all earlier repository changes were incorporated. If no trustworthy baseline can be established, inspect the current repository directly and reconcile it with `AGENTS.md`.
+Otherwise run `scripts/inspect_repo.py` without a baseline and use its automatically discovered Git boundary. Treat automatic baselines as discovery boundaries, not proof that older guidance is complete.
 
 ## Working model
 
@@ -37,87 +37,134 @@ A useful entry should answer a recurring question for future agents, prevent a l
 
 ## Workflow
 
-### 1. Discover applicable guidance
+### 1. Collect deterministic evidence
 
-Find root and nested `AGENTS.md` files. Determine which directory tree each file governs and respect repository-specific scoping rules.
+Run:
+
+```sh
+python scripts/inspect_repo.py
+```
+
+Or, when the user supplied a baseline:
+
+```sh
+python scripts/inspect_repo.py --baseline <ref>
+```
+
+Consume the structured output. Start with `highSignalFiles` and `workingTreeChanges`, while keeping the complete `changedFiles` list available for context.
+
+The inspector identifies where investigation is likely worthwhile. Its signal labels are prioritization hints, not conclusions that `AGENTS.md` must change.
+
+### 2. Discover applicable guidance
+
+Read the root `AGENTS.md` and any nested `AGENTS.md` whose scope covers a high-signal change. Determine which directory tree each file governs.
+
+If no `AGENTS.md` exists, do not automatically create one merely because the skill was invoked. First establish that durable repository guidance exists and would materially help future agents.
 
 Preserve intentional human-authored instructions unless repository evidence clearly shows a conflict. A conflict is something to surface, not permission to silently overwrite human intent.
 
-### 2. Establish the Git baseline
+### 3. Investigate each high-signal change
 
-Prefer an explicit user-supplied ref.
+For each high-signal file, follow an evidence ladder. Stop when the evidence is sufficient to accept or reject a candidate. Do not read broadly without a reason.
 
-Otherwise inspect Git history and choose a useful comparison point based on available evidence. Treat the baseline as a discovery aid, not as proof that older guidance is correct.
+1. **Path and signal**: understand why the inspector flagged the file.
+2. **Diff**: inspect what actually changed between the baseline and current state, including working-tree changes when present.
+3. **Current file**: read the relevant current section so deleted or moved context is not mistaken for present truth.
+4. **Direct dependencies**: inspect files directly referenced by, invoked by, generated from, or structurally coupled to the changed file when needed.
+5. **Corroboration**: look for a second source such as a script, config, test, documentation file, schema consumer, or repeated repository pattern before inferring a repository-wide convention.
 
-If a reliable baseline cannot be determined, continue by evaluating current repository state against existing guidance.
+The diff answers what changed. The current file answers what is true. Related evidence answers whether the fact is durable and operationally important.
 
-### 3. Triage repository changes
+### 4. Form candidate guidance
 
-Start with inexpensive evidence such as changed filenames, status, commit history, and diff summaries. Use this to identify high-signal areas before reading file contents.
+Convert evidence into a candidate only when it can be expressed as an instruction or constraint useful to a future coding agent.
 
-High-signal areas include:
+Represent the reasoning internally as:
 
-- build, test, lint, formatting, and deployment configuration;
-- package manifests, lockfiles, runtimes, and major tooling;
-- architecture and important directory boundaries;
-- database, data model, and API schemas;
-- generated, vendored, protected, or special files;
-- repository-wide conventions and validation rules;
-- scripts and documentation that define how development work is performed.
+```text
+Evidence -> Repository fact -> Agent consequence -> Candidate guidance
+```
 
-Do not infer a repository rule from a single accidental implementation detail.
+Example:
 
-### 4. Inspect current truth selectively
+```text
+package.json changes test script to `vitest run`
++ CI invokes `npm test`
+-> repository test entry point is now `npm test`
+-> agents should use that command before completing changes
+-> "Run `npm test` before submitting changes."
+```
 
-For high-signal changes, inspect both the relevant diff and the current version of the affected files when useful.
+Do not copy implementation facts directly into `AGENTS.md`. First identify the consequence for future agent behavior.
 
-Do not read the entire repository by default. Expand inspection only when the evidence requires it.
+### 5. Apply the durability test
 
-Git history answers where to look. Current repository state answers what is true.
+A candidate should normally pass all of these questions:
 
-### 5. Extract candidate guidance
+- **Future relevance**: Is this likely to matter beyond the current task or commit?
+- **Behavior impact**: Would knowing it change how a future agent edits, validates, navigates, or reasons about the repository?
+- **Evidence strength**: Is it directly supported, or sufficiently corroborated if inferred?
+- **Discoverability**: Is recording it more useful than expecting an agent to rediscover it each time?
+- **Stability**: Is it unlikely to become obsolete immediately?
+- **Scope**: Can it be stated at the correct repository or directory scope?
 
-For each meaningful finding, ask whether a future agent needs the information to work correctly, safely, or efficiently.
+Reject a candidate when the answer to future relevance, behavior impact, or evidence strength is no.
 
-Strong candidates include changes to commands, architecture, directory responsibilities, major tooling, durable schema/interface expectations, repository-wide conventions, validation requirements, and files agents must handle specially.
+Discoverability is contextual. A command visible in `package.json` may still deserve guidance when it is the required validation path. A trivial implementation detail visible next to the edited code usually does not.
 
-Usually reject isolated bug fixes, temporary implementation details, immediately expiring migration steps, facts obvious from nearby code, and descriptions of what a particular commit did.
+### 6. Use signal-specific investigation
 
-### 6. Reconcile candidates with AGENTS.md
+Treat inspector signals as prompts for targeted questions:
 
-Classify each candidate as:
+- **dependencies-tooling**: Did the package manager, runtime, framework, required tool, or canonical command change? Ignore ordinary dependency bumps unless they change development behavior.
+- **schema-interface**: Did an API, database model, generated contract, migration workflow, or compatibility rule change in a way future edits must respect? Do not document every field or migration.
+- **build-deploy**: Did the build/deploy entry point, environment assumption, generated artifact, CI requirement, or hosting constraint change?
+- **commands-workflow**: Did the supported way to run, generate, migrate, seed, validate, or maintain the repository change?
+- **validation-conventions**: Did formatting, linting, typing, testing, or repository-wide coding requirements change?
+- **agent-guidance**: Treat changes to `AGENTS.md` itself as context. Do not assume a recent edit was a complete reconciliation.
 
-- already accurate;
-- missing;
-- stale;
-- contradictory; or
-- irrelevant to durable agent guidance.
+Architecture and directory changes may not always receive a filename-based signal. If the changed-file set shows meaningful moves, additions, deletions, or repeated new boundaries, inspect the relevant tree structure and ownership patterns.
 
-Only missing, stale, or appropriately resolvable contradictory guidance should produce an edit.
+### 7. Reconcile candidates with AGENTS.md
 
-When repository evidence conflicts with explicit human-authored guidance, report the conflict rather than silently replacing the human instruction.
+For every surviving candidate, classify the applicable existing guidance as:
 
-### 7. Make the smallest durable edit
+- **already accurate**: no edit;
+- **missing**: add the smallest useful instruction;
+- **stale**: replace or remove the obsolete instruction;
+- **contradictory**: resolve only when the existing text is inferred/derived guidance and repository evidence is strong;
+- **human conflict**: surface the conflict instead of silently changing explicit human intent;
+- **irrelevant**: no edit.
+
+Prefer modifying an existing instruction over adding a second instruction about the same behavior.
+
+### 8. Make the smallest durable edit
 
 Patch the `AGENTS.md` file whose scope matches the guidance. Root guidance belongs at the root; narrowly scoped guidance belongs in the appropriate nested file when one exists or is warranted.
 
-Prefer concise instructions that remain useful across future tasks. Remove or correct stale guidance when repository evidence supports doing so.
+Write instructions in operational language. Prefer what an agent should do, avoid, verify, or understand over historical explanation.
 
 Do not rewrite the whole file for style. Do not reorder stable sections without a functional reason. Do not erase useful human context just to standardize wording.
 
-### 8. Verify
+### 9. Verify
 
-Check every changed instruction against current repository evidence.
+Run:
 
-Where practical, verify commands against configuration or scripts rather than memory. Verify paths and schema/interface claims against their current definitions. Check for contradictions between root and nested `AGENTS.md` files.
+```sh
+python scripts/verify_agents.py
+```
 
-### 9. Report
+Then perform semantic verification yourself. For every changed instruction, identify the current repository evidence that supports it. Re-run relevant repository commands when practical. Verify paths and schema/interface claims against current definitions. Check root and nested guidance for contradictions.
+
+If an instruction cannot be supported after verification, remove or revise it before finishing.
+
+### 10. Report
 
 State whether `AGENTS.md` changed.
 
-If it changed, briefly explain the repository evidence that justified each meaningful documentation update and identify which `AGENTS.md` file was modified when multiple scopes exist.
+For each meaningful edit, report the repository evidence and the behavioral consequence that justified it. Identify which `AGENTS.md` file changed when multiple scopes exist.
 
-If it did not change, say that the repository evidence did not reveal a durable guidance change requiring an edit.
+If it did not change, say that the inspected repository evidence did not produce durable guidance requiring an edit. A no-change result is a successful reconciliation.
 
 ## Guardrails
 
@@ -130,6 +177,8 @@ If it did not change, say that the repository evidence did not reveal a durable 
 - Keep guidance scoped to the directory where it applies.
 - Favor small, reviewable edits over broad rewrites.
 - Avoid timestamps or volatile details unless they are operationally necessary.
+- Do not treat every high-signal file as an AGENTS.md change. Signals trigger investigation, not documentation.
+- Do not promote a local pattern into a repository-wide rule without corroboration.
 
 ## Success criteria
 
