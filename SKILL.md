@@ -13,6 +13,22 @@ Continuously evaluate repository changes for information that affects how agents
 
 Do not update it merely because code changed. Update it only when a change creates, modifies, or invalidates durable guidance future agents need.
 
+## State model
+
+For v1, Git is the state store. Do not create a database or persistent snapshot file merely to remember previous repository contents.
+
+Use Git history to identify what changed and where to investigate. Use the current repository to determine what is true now. Use the applicable `AGENTS.md` files to determine what guidance agents currently receive. Reconcile all three.
+
+A diff is evidence, not documentation.
+
+## Manual invocation
+
+When the user explicitly asks to update, refresh, reconcile, or check `AGENTS.md`, run this workflow.
+
+If the user supplies a commit, tag, branch, or other valid Git ref as the baseline, use it.
+
+If no baseline is supplied, use Git history to identify a useful comparison point. Do not assume that the most recent edit to `AGENTS.md` proves that all earlier repository changes were incorporated. If no trustworthy baseline can be established, inspect the current repository directly and reconcile it with `AGENTS.md`.
+
 ## Working model
 
 Treat `AGENTS.md` as durable operational guidance, not as a changelog or a summary of the repository.
@@ -21,77 +37,91 @@ A useful entry should answer a recurring question for future agents, prevent a l
 
 ## Workflow
 
-### 1. Read existing guidance
+### 1. Discover applicable guidance
 
-Find the applicable `AGENTS.md` files and read them before proposing changes. Respect nested guidance and repository-specific scope.
+Find root and nested `AGENTS.md` files. Determine which directory tree each file governs and respect repository-specific scoping rules.
 
-Preserve intentional human-authored instructions unless repository evidence clearly shows that they are obsolete or incorrect.
+Preserve intentional human-authored instructions unless repository evidence clearly shows a conflict. A conflict is something to surface, not permission to silently overwrite human intent.
 
-### 2. Inspect repository change
+### 2. Establish the Git baseline
 
-Determine what changed using the strongest evidence available, such as:
+Prefer an explicit user-supplied ref.
 
-- the current task and edited files;
-- the diff or commits since the last relevant state;
-- build and package configuration;
-- test, lint, formatting, and deployment configuration;
-- directory and architecture changes;
-- repository documentation and scripts.
+Otherwise inspect Git history and choose a useful comparison point based on available evidence. Treat the baseline as a discovery aid, not as proof that older guidance is correct.
 
-Do not infer a new repository rule from a single accidental implementation detail.
+If a reliable baseline cannot be determined, continue by evaluating current repository state against existing guidance.
 
-### 3. Decide whether AGENTS.md is affected
+### 3. Triage repository changes
 
-Update guidance when the change creates or modifies durable knowledge that future agents need.
+Start with inexpensive evidence such as changed filenames, status, commit history, and diff summaries. Use this to identify high-signal areas before reading file contents.
 
-Strong signals include:
+High-signal areas include:
 
-- a build, test, lint, formatting, or deployment command changed;
-- architecture or important directory boundaries changed;
-- a new framework, package manager, runtime, or major tool changes how work is performed;
-- database, data model, or API schema changes that affect implementation patterns, interfaces, or workflows;
-- repository-wide coding or testing conventions changed;
-- generated, vendored, protected, or otherwise special files changed;
-- validation requirements changed;
-- a repeated agent mistake reveals missing repository guidance.
+- build, test, lint, formatting, and deployment configuration;
+- package manifests, lockfiles, runtimes, and major tooling;
+- architecture and important directory boundaries;
+- database, data model, and API schemas;
+- generated, vendored, protected, or special files;
+- repository-wide conventions and validation rules;
+- scripts and documentation that define how development work is performed.
 
-Usually do not update for:
+Do not infer a repository rule from a single accidental implementation detail.
 
-- isolated bug fixes;
-- temporary implementation details;
-- one-off migrations whose instructions will immediately expire;
-- facts obvious from nearby code;
-- descriptions of what a particular commit did.
+### 4. Inspect current truth selectively
 
-When uncertain, prefer no change over speculative guidance.
+For high-signal changes, inspect both the relevant diff and the current version of the affected files when useful.
 
-### 4. Make the smallest durable edit
+Do not read the entire repository by default. Expand inspection only when the evidence requires it.
 
-Change only the affected section when possible.
+Git history answers where to look. Current repository state answers what is true.
+
+### 5. Extract candidate guidance
+
+For each meaningful finding, ask whether a future agent needs the information to work correctly, safely, or efficiently.
+
+Strong candidates include changes to commands, architecture, directory responsibilities, major tooling, durable schema/interface expectations, repository-wide conventions, validation requirements, and files agents must handle specially.
+
+Usually reject isolated bug fixes, temporary implementation details, immediately expiring migration steps, facts obvious from nearby code, and descriptions of what a particular commit did.
+
+### 6. Reconcile candidates with AGENTS.md
+
+Classify each candidate as:
+
+- already accurate;
+- missing;
+- stale;
+- contradictory; or
+- irrelevant to durable agent guidance.
+
+Only missing, stale, or appropriately resolvable contradictory guidance should produce an edit.
+
+When repository evidence conflicts with explicit human-authored guidance, report the conflict rather than silently replacing the human instruction.
+
+### 7. Make the smallest durable edit
+
+Patch the `AGENTS.md` file whose scope matches the guidance. Root guidance belongs at the root; narrowly scoped guidance belongs in the appropriate nested file when one exists or is warranted.
 
 Prefer concise instructions that remain useful across future tasks. Remove or correct stale guidance when repository evidence supports doing so.
 
 Do not rewrite the whole file for style. Do not reorder stable sections without a functional reason. Do not erase useful human context just to standardize wording.
 
-### 5. Verify
+### 8. Verify
 
-Before finishing, check that every changed instruction is supported by the current repository.
+Check every changed instruction against current repository evidence.
 
-Where practical, verify commands against configuration or scripts rather than memory.
+Where practical, verify commands against configuration or scripts rather than memory. Verify paths and schema/interface claims against their current definitions. Check for contradictions between root and nested `AGENTS.md` files.
 
-Check for contradictions between root and nested `AGENTS.md` files.
-
-### 6. Report
+### 9. Report
 
 State whether `AGENTS.md` changed.
 
-If it changed, briefly explain the repository change that justified each meaningful documentation update.
+If it changed, briefly explain the repository evidence that justified each meaningful documentation update and identify which `AGENTS.md` file was modified when multiple scopes exist.
 
-If it did not change, say that the repository changes did not alter durable agent guidance.
+If it did not change, say that the repository evidence did not reveal a durable guidance change requiring an edit.
 
 ## Guardrails
 
-- Never invent commands, paths, conventions, or architectural rules.
+- Never invent commands, paths, conventions, schemas, interfaces, or architectural rules.
 - Never turn `AGENTS.md` into a running changelog.
 - Prefer repository evidence over assumptions.
 - Treat explicit human-authored instructions as higher-confidence than inferred conventions. If repository evidence conflicts with them, surface the conflict rather than silently overriding them.
