@@ -45,6 +45,28 @@ class BehaviorEvaluationTests(unittest.TestCase):
             (repo / 'Makefile').write_text('broken\n')
             self.assertFalse(check('changed-command', repo, 'Updated.')['ok'])
 
+    def test_unborn_fixture_preserves_preexisting_untracked_sources(self):
+        with tempfile.TemporaryDirectory() as directory:
+            repo = Path(directory) / 'repo'
+            prepare('unborn-repository', repo)
+            guidance = repo / 'AGENTS.md'
+            guidance.write_text(guidance.read_text() + '\nRun `make check` before submitting changes.\n')
+            self.assertTrue(check('unborn-repository', repo, 'No commits exist; used current evidence.')['ok'])
+            (repo / 'Makefile').write_text('broken\n')
+            self.assertFalse(check('unborn-repository', repo, 'No commits exist; used current evidence.')['ok'])
+
+    def test_staged_source_mutation_is_detected_when_working_copy_is_restored(self):
+        import subprocess
+        with tempfile.TemporaryDirectory() as directory:
+            repo = Path(directory) / 'repo'
+            prepare('no-change', repo)
+            source = repo / 'src/label.py'
+            original = source.read_bytes()
+            source.write_text('LABEL = "staged mutation"\n')
+            subprocess.check_call(['git', '-C', str(repo), 'add', 'src/label.py'])
+            source.write_bytes(original)
+            self.assertFalse(check('no-change', repo, 'No guidance change needed.')['ok'])
+
     def test_prepare_refuses_existing_directory(self):
         with tempfile.TemporaryDirectory() as directory:
             with self.assertRaises(FileExistsError):

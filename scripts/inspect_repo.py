@@ -33,55 +33,47 @@ def classify(path: str) -> list[str]:
     return signals
 
 
-def discover_baseline(repo: GitRepo, agents_files: list[str], head: str) -> dict[str, str | None]:
-    """Choose a conservative automatic baseline using Git-only evidence.
+def boundary(sha: str | None, source: str, confidence: str, reason: str) -> dict:
+    return {"sha": sha, "source": source, "confidence": confidence, "reason": reason}
 
-    Preference order:
-    1. A diverged upstream branch's merge-base, which represents the start of
-       the current branch's work.
-    2. The most recent commit that changed an existing AGENTS.md, treated only
-       as a heuristic reconciliation boundary.
-    3. The repository root commit, which is expensive but avoids silently
-       pretending a newer trustworthy boundary exists.
-    """
+
+def discover_baseline(repo: GitRepo, agents_files: list[str], head: str | None, shallow: bool) -> dict:
+    """Select a discovery boundary without treating truncated history as complete."""
     git = repo.git
+    if head is None:
+        return boundary(None, "no-commits", "none", "The repository has no commits. Review current files and working-tree changes directly.")
+    if shallow:
+        return boundary(None, "shallow-history", "none", "History is shallow; visible roots and guidance edits may be truncated. Review current repository state without inventing a reconciliation boundary.")
+
     upstream = git("rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{upstream}", check=False)
+    branch_boundary = None
     if upstream:
         merge_base = git("merge-base", "HEAD", upstream, check=False)
         upstream_head = git("rev-parse", upstream, check=False)
         if merge_base and upstream_head and head != upstream_head and merge_base != head:
-            return {
-                "sha": merge_base,
-                "source": "upstream-merge-base",
-                "confidence": "high",
-                "reason": f"Current branch diverges from {upstream}; using their merge-base.",
-            }
+            branch_boundary = merge_base
 
-    if agents_files:
-        last_agents_commit = git("log", "-1", "--format=%H", "--", *agents_files, check=False)
-        if last_agents_commit and last_agents_commit != head:
-            return {
-                "sha": last_agents_commit,
-                "source": "last-agents-change",
-                "confidence": "medium",
-                "reason": "Using the last commit that changed an applicable AGENTS.md as a discovery boundary. This does not prove all earlier changes were reconciled.",
-            }
+    # A recent nested edit is not evidence that older root/sibling guidance was
+    # reconciled. Retain the common ancestor of every current scope's boundary.
+    guidance_boundaries = [git("log", "-1", "--format=%H", "--", f":(literal){path}", check=False)
+                           for path in agents_files]
+    guidance_complete = bool(guidance_boundaries) and all(guidance_boundaries)
+    boundaries = list(dict.fromkeys(guidance_boundaries)) if guidance_complete else []
+    if branch_boundary and (not agents_files or guidance_complete):
+        boundaries.append(branch_boundary)
+    if boundaries:
+        boundaries = list(dict.fromkeys(boundaries))
+        candidate = boundaries[0] if len(boundaries) == 1 else git("merge-base", "--octopus", *boundaries, check=False)
+        if candidate and candidate != head:
+            if branch_boundary and candidate == branch_boundary:
+                return boundary(candidate, "upstream-merge-base", "high", f"Using the merge-base with {upstream}, conservatively combined with existing guidance boundaries.")
+            source = "last-agents-change" if len(set(guidance_boundaries)) == 1 else "guidance-merge-base"
+            return boundary(candidate, source, "medium", "Using a common ancestor of the latest edits to each current guidance scope and any branch boundary. This is a discovery heuristic, not proof that earlier changes were reconciled.")
 
-    root_commit = git("rev-list", "--max-parents=0", "HEAD", check=False).splitlines()
-    if root_commit:
-        return {
-            "sha": root_commit[0],
-            "source": "repository-root",
-            "confidence": "low",
-            "reason": "No stronger Git-only reconciliation boundary was found; using repository history from the root commit.",
-        }
-
-    return {
-        "sha": None,
-        "source": "none",
-        "confidence": "none",
-        "reason": "Git did not provide a usable automatic baseline. Reconcile current repository state directly.",
-    }
+    roots = git("rev-list", "--max-parents=0", "HEAD").splitlines()
+    if len(roots) == 1:
+        return boundary(roots[0], "repository-root", "low", "No stronger boundary was found. Review current state as well as history: the root-to-HEAD diff omits files introduced in the root commit.")
+    return boundary(None, "multiple-roots", "none", "History has multiple roots and no common reconciliation boundary. Review current repository state directly.")
 
 
 def main() -> int:
@@ -94,7 +86,8 @@ def main() -> int:
         repo = GitRepo(args.repo)
         git = repo.git
         root = repo.root
-        head = git("rev-parse", "HEAD")
+        head = git("rev-parse", "--verify", "HEAD", check=False) or None
+        shallow = git("rev-parse", "--is-shallow-repository") == "true"
     except RuntimeError as exc:
         print(json.dumps({"error": str(exc)}))
         return 2
@@ -105,7 +98,7 @@ def main() -> int:
     if args.baseline:
         try:
             baseline_info = {
-                "sha": git("rev-parse", "--verify", f"{args.baseline}^{{commit}}"),
+                "sha": git("rev-parse", "--verify", "--end-of-options", f"{args.baseline}^{{commit}}"),
                 "source": "user",
                 "confidence": "explicit",
                 "reason": f"User supplied baseline {args.baseline!r}.",
@@ -114,7 +107,7 @@ def main() -> int:
             print(json.dumps({"error": f"Invalid baseline {args.baseline!r}: {exc}"}))
             return 2
     else:
-        baseline_info = discover_baseline(repo, agents_files, head)
+        baseline_info = discover_baseline(repo, agents_files, head, shallow)
 
     baseline_sha = baseline_info["sha"]
 
@@ -124,14 +117,30 @@ def main() -> int:
             for item in items
         ]
 
-    files = add_signals(repo.changed_files(baseline_sha))
+    files = add_signals(repo.changed_files(baseline_sha)) if baseline_sha and head else []
     working = add_signals(repo.working_tree_files())
+    current_review = not agents_files or shallow or baseline_info["source"] in {"no-commits", "shallow-history", "repository-root", "multiple-roots"}
+    current_files = repo.current_files() if current_review else []
+    current_signals = [{"path": path, "signals": classify(path)} for path in current_files if classify(path)]
+    removed_guidance = sorted({path for item in files + working
+                               for path in (item["path"], item.get("previousPath", ""))
+                               if Path(path).name == "AGENTS.md" and not (root / path).exists()})
+    warnings = []
+    if shallow:
+        warnings.append("Git history is shallow. No network fetch was attempted; current-state review is required.")
     evidence = {
         "repositoryRoot": str(root),
         "branch": branch,
         "head": head,
         "baseline": baseline_info,
         "agentsFiles": agents_files,
+        "guidanceScopes": repo.guidance_scopes(agents_files),
+        "deletedAgentsFiles": removed_guidance,
+        "historyComplete": not shallow,
+        "currentStateReviewRequired": current_review,
+        "currentFiles": current_files,
+        "currentHighSignalFiles": current_signals,
+        "warnings": warnings,
         "changedFiles": files,
         "highSignalFiles": [item for item in files if item["signals"]],
         "workingTreeChanges": working,

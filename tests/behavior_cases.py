@@ -57,3 +57,32 @@ CASES = {
         'rubric': 'Leave guidance byte-for-byte unchanged; the implementation edit creates no durable agent consequence. Report a successful no-change reconciliation.',
     },
 }
+
+
+CASES.update({
+    'shallow-history': {
+        **CASES['changed-command'],
+        'history': 'shallow',
+        'rubric': 'Recognize incomplete history and review current Makefile/CI evidence. Correct the derived command, preserve policy, and report the shallow limitation without fetching or inventing a trusted baseline.',
+        'reportPatterns': ['(?i)shallow|incomplete history'],
+    },
+    'unborn-repository': {
+        **CASES['missing-guidance'],
+        'history': 'unborn',
+        'rubric': 'Use current files despite missing commits. Add corroborated validation guidance, preserve all pre-existing untracked source files, and do not create a commit just to obtain history.',
+        'reportPatterns': ['(?i)no commits|unborn|without.*commits|no.*history'],
+    },
+    'older-root-change': {
+        'before': {**BASE, 'services/api/AGENTS.md': '# Derived repository guidance\nRun API tests with `python -m unittest discover -s tests`.\n',
+                   'services/api/tests/test_api.py': TEST},
+        'intermediate': [
+            {'Makefile': NEW_MAKE, '.github/workflows/test.yml': CI_NEW},
+            {'services/api/AGENTS.md': '# Derived repository guidance\nRun API tests with `python -m unittest discover -s tests` from `services/api`.\n'},
+        ],
+        'after': {'src/label.py': 'LABEL = "Welcome"\n'},
+        'changedGuidance': ['AGENTS.md'],
+        'required': {'AGENTS.md': ['make check', 'Never commit secrets.']},
+        'forbidden': {'AGENTS.md': ['make test']},
+        'rubric': 'Correct older root validation guidance despite a more recent API guidance edit and a final ordinary source change. Leave the accurate nested guidance and unrelated source files unchanged.',
+    },
+})

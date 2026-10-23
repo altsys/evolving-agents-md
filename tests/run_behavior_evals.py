@@ -6,6 +6,7 @@ import argparse
 import json
 import re
 import subprocess
+import tempfile
 from pathlib import Path
 
 from behavior_cases import CASES
@@ -15,35 +16,70 @@ def git(repo: Path, *args: str) -> str:
     return subprocess.check_output(['git', '-C', str(repo), *args]).decode('utf-8', errors='surrogateescape')
 
 
+def snapshot(case: dict) -> dict[str, str]:
+    files = {}
+    for state in [case['before'], *case.get('intermediate', []), case['after']]:
+        files.update(state)
+    return files
+
+
 def prepare(name: str, repo: Path) -> None:
     # Refuse to overwrite an existing run or checkout.
+    if repo.exists():
+        raise FileExistsError(repo)
+    case = CASES[name]
+    if case.get('history') == 'shallow':
+        with tempfile.TemporaryDirectory() as directory:
+            seed = Path(directory) / 'seed'
+            seed_case(case, seed)
+            repo.parent.mkdir(parents=True, exist_ok=True)
+            subprocess.check_call(['git', 'clone', '-q', '--depth=1', seed.as_uri(), str(repo)])
+        return
+    seed_case(case, repo)
+
+
+def seed_case(case: dict, repo: Path) -> None:
     repo.mkdir(parents=True, exist_ok=False)
     git(repo, 'init', '-q')
     git(repo, 'config', 'user.name', 'Behavior fixture')
     git(repo, 'config', 'user.email', 'fixture@example.test')
-    for message, files in [('initial state', CASES[name]['before']), ('repository change', CASES[name]['after'])]:
+    states = [case['before'], *case.get('intermediate', []), case['after']]
+    for index, files in enumerate(states):
         for relative, content in files.items():
             target = repo / relative
             target.parent.mkdir(parents=True, exist_ok=True)
             target.write_text(content, encoding='utf-8')
-        git(repo, 'add', '-A')
-        git(repo, 'commit', '-qm', message)
+        if case.get('history') != 'unborn':
+            git(repo, 'add', '-A')
+            git(repo, 'commit', '-qm', f'fixture state {index}')
 
 
 def check(name: str, repo: Path, report: str) -> dict:
     case = CASES[name]
     errors = []
-    tracked = set(filter(None, git(repo, 'ls-files', '-z').split('\0')))
-    untracked = set(filter(None, git(repo, 'ls-files', '--others', '--exclude-standard', '-z').split('\0')))
+    original = snapshot(case)
+    actual_paths = set(filter(None, git(repo, 'ls-files', '--cached', '--others', '--exclude-standard', '-z').split('\0')))
     changed = set()
-    for relative in tracked:
+    for relative in set(original) | actual_paths:
         target = repo / relative
-        original = subprocess.check_output(['git', '-C', str(repo), 'show', f'HEAD:{relative}'])
-        if not target.is_file() or target.read_bytes() != original:
+        before = original.get(relative)
+        if before is None or not target.is_file() or target.read_bytes() != before.encode('utf-8'):
             changed.add(relative)
-    changed |= untracked
-    # Also catch staged-only edits and deleted files.
-    changed |= set(filter(None, git(repo, 'diff', '--name-only', '-z', 'HEAD').split('\0')))
+    # Compare against fixture state rather than HEAD, so unborn checkouts work
+    # and an accidental agent commit cannot hide changes from the grader.
+    indexed = set()
+    for record in filter(None, git(repo, 'ls-files', '--stage', '-z').split('\0')):
+        header, relative = record.split('\t', 1)
+        _, sha, stage = header.split()
+        indexed.add(relative)
+        if stage != '0' or relative not in original:
+            changed.add(relative)
+            continue
+        content = subprocess.check_output(['git', '-C', str(repo), 'cat-file', 'blob', sha])
+        if case.get('history') == 'unborn' or content != original[relative].encode('utf-8'):
+            changed.add(relative)
+    if case.get('history') != 'unborn':
+        changed |= set(original) - indexed
     expected = set(case['changedGuidance'])
     if changed != expected:
         errors.append(f'Changed files: expected {sorted(expected)!r}, got {sorted(changed)!r}')

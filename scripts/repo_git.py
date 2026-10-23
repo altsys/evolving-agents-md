@@ -21,8 +21,10 @@ class GitRepo:
         )
         stdout = result.stdout.decode("utf-8", errors="surrogateescape")
         stderr = result.stderr.decode("utf-8", errors="surrogateescape")
-        if check and result.returncode:
-            raise RuntimeError(stderr.strip() or f"git {args[0]} failed")
+        if result.returncode:
+            if check:
+                raise RuntimeError(stderr.strip() or f"git {args[0]} failed")
+            return ""
         return stdout if raw else stdout.removesuffix("\n")
 
     def agents_files(self) -> list[str]:
@@ -32,6 +34,20 @@ class GitRepo:
             if "AGENTS.md" in names:
                 files.append((Path(directory) / "AGENTS.md").relative_to(self.root).as_posix())
         return sorted(files)
+
+    def current_files(self) -> list[str]:
+        paths = self.git("ls-files", "--cached", "--others", "--exclude-standard", "-z", raw=True)
+        return sorted({path for path in paths.split("\0") if path and (self.root / path).is_file()})
+
+    def guidance_scopes(self, agents: list[str]) -> list[dict[str, str | None]]:
+        scopes = []
+        known = set(agents)
+        for relative in agents:
+            directory = Path(relative).parent
+            parents = [parent / "AGENTS.md" for parent in directory.parents]
+            parent = next((path.as_posix() for path in parents if path.as_posix() in known), None)
+            scopes.append({"path": relative, "directory": directory.as_posix(), "parent": parent})
+        return scopes
 
     def working_tree_files(self) -> list[dict[str, str]]:
         records = self.git("status", "--porcelain=v1", "-z", "--untracked-files=all", raw=True).split("\0")

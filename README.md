@@ -2,6 +2,51 @@
 
 An agent skill that continuously keeps `AGENTS.md` aligned with an evolving codebase.
 
+## Quick start
+
+Require Python 3.10+, Git, and a coding agent that can read local skill files and run
+commands. The Python helpers use only the standard library.
+
+Clone this skill outside the repository you want to maintain:
+
+```sh
+mkdir -p ~/agent-skills
+git clone https://github.com/altsys/evolving-agents-md.git ~/agent-skills/evolving-agents-md
+```
+
+Give your agent the absolute path to the cloned `SKILL.md` and the target checkout:
+
+```text
+Use the skill at /absolute/path/to/evolving-agents-md/SKILL.md to check recent
+repository changes and update AGENTS.md in /absolute/path/to/my-project.
+```
+
+Add `since <commit/tag/branch>` when you want a specific baseline. This explicit-path
+invocation works without an installer or client-specific discovery configuration.
+If your client supports a skill catalog, register the same folder through that
+client's supported setup. Keep `scripts/` beside `SKILL.md`; the helpers collect and
+check evidence, while the coding agent makes and verifies guidance edits.
+
+## Example: a renamed validation command
+
+Suppose the Makefile renames `test` to `check` and CI also switches to `make check`.
+Existing **derived** guidance says:
+
+```markdown
+Run `make test` to validate changes.
+```
+
+The skill corroborates both files, then changes that line to:
+
+```markdown
+Run `make check` to validate changes.
+```
+
+It preserves unrelated instructions and reports the evidence, behavioral consequence,
+and checks run. An explicit maintainer instruction conflicting with the command is
+reported for resolution. A dependency patch or label-text edit can correctly result
+in no guidance change.
+
 ## Why
 
 `AGENTS.md` is useful only while it reflects the repository agents are actually working in. As architecture, commands, conventions, dependencies, schemas, and workflows change, static guidance can become stale and eventually misleading.
@@ -59,7 +104,30 @@ python "/absolute/path/to/evolving-agents-md/scripts/verify_agents.py" --repo "/
 Output paths are always relative to the target repository root. Changes include
 individual untracked files; renames preserve both `path` and `previousPath`.
 `workingTreeChanges` and `changedAgentsFiles` contain structured path/status records.
-The verifier checks structure; an agent must still verify instruction meaning.
+`guidanceScopes` describes each guidance file's directory and nearest parent;
+`deletedAgentsFiles` reports removed guidance found in inspected changes.
+
+History fallbacks are explicit:
+
+| Repository state | Inspection behavior |
+| --- | --- |
+| No commits yet | `head` and `baseline.sha` are null; review current files and staged/untracked changes. |
+| Shallow clone | Automatic baseline is null; warn that history is incomplete and review current state. No fetch is attempted. |
+| Valid explicit baseline | Honor it; shallow history remains flagged. An unavailable ref returns an error. |
+| Root fallback or multiple unrelated roots | Review current files too, including files introduced in the initial commit. |
+| Multiple guidance scopes | Combine scope boundaries conservatively so a recent nested edit cannot hide older root/sibling changes. |
+| Deleted guidance or detached HEAD | Report available evidence without recreating deleted instructions or requiring an attached branch. |
+
+When `currentStateReviewRequired` is true, use `currentHighSignalFiles` and
+`currentFiles` alongside change evidence. All automatic boundaries remain heuristics.
+
+The verifier reports `verificationLevel: structural-only`; `ok: true` means only that
+its structural checks passed. It checks nonblank UTF-8 guidance and merge markers,
+reports untracked/removed files and all working-tree changes, and exposes scope relationships. It also rejects unmerged guidance and reads configured conflict marker sizes. Commands, paths,
+contradictions, and instruction meaning still require agent review. Exit codes are
+0 for successful structural checks (warnings may remain), 1 for structural errors,
+and 2 for invalid invocation/repository errors. The inspector uses 0 for successful
+evidence collection and 2 for invalid repository/baseline errors.
 
 From this skill repository, run the deterministic tests with:
 
@@ -108,3 +176,7 @@ The goal is not to make the file change often. The goal is to make it trustworth
 ## Status
 
 Early development. Manual invocation and the Git-backed reconciliation mechanism are the v1 focus. The behavioral contract lives in [`SKILL.md`](./SKILL.md).
+
+## License
+
+[MIT](LICENSE).
