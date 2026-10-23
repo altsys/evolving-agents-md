@@ -44,6 +44,33 @@ If the user supplies a commit, tag, or branch, the skill uses it as the comparis
 
 Future versions may add change-driven and scheduled reconciliation triggers. A raw commit-count trigger is intentionally not part of v1 because commit count measures activity, not significance.
 
+## Helper invocation and validation
+
+Require Python 3.10+ and Git. The skill's scripts stay in the installed skill folder;
+they do not need to be copied into the target repository:
+
+```sh
+python "/absolute/path/to/evolving-agents-md/scripts/inspect_repo.py" --repo "/path/to/target"
+python "/absolute/path/to/evolving-agents-md/scripts/inspect_repo.py" --repo "/path/to/target" --baseline "<ref>"
+python "/absolute/path/to/evolving-agents-md/scripts/verify_agents.py" --repo "/path/to/target"
+```
+
+`--repo` defaults to the current directory and accepts a subdirectory of a checkout.
+Output paths are always relative to the target repository root. Changes include
+individual untracked files; renames preserve both `path` and `previousPath`.
+`workingTreeChanges` and `changedAgentsFiles` contain structured path/status records.
+The verifier checks structure; an agent must still verify instruction meaning.
+
+From this skill repository, run the deterministic tests with:
+
+```sh
+python -m unittest discover -s tests -v
+```
+
+For agent evaluations covering stale and missing guidance, human conflicts, nested
+scopes, and no-change decisions, follow [the evaluation instructions](evals/README.md).
+These evaluations run separately from CI and require semantic review of each result.
+
 ## What should trigger an AGENTS.md change?
 
 Examples include:

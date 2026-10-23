@@ -9,17 +9,9 @@ from __future__ import annotations
 
 import argparse
 import json
-import subprocess
 from pathlib import Path
 
-
-def git(*args: str, check: bool = True) -> str:
-    result = subprocess.run(
-        ["git", *args], text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=False
-    )
-    if check and result.returncode != 0:
-        raise RuntimeError(result.stderr.strip() or f"git {' '.join(args)} failed")
-    return result.stdout.strip()
+from repo_git import GitRepo
 
 
 def classify(path: str) -> list[str]:
@@ -41,20 +33,7 @@ def classify(path: str) -> list[str]:
     return signals
 
 
-def discover_agents(root: Path) -> list[str]:
-    ignored = {".git", "node_modules", ".venv", "venv", "dist", "build", ".next"}
-    return sorted(
-        path.relative_to(root).as_posix()
-        for path in root.rglob("AGENTS.md")
-        if not any(part in ignored for part in path.parts)
-    )
-
-
-def resolve_ref(ref: str) -> str:
-    return git("rev-parse", "--verify", f"{ref}^{{commit}}")
-
-
-def discover_baseline(agents_files: list[str], head: str) -> dict[str, str | None]:
+def discover_baseline(repo: GitRepo, agents_files: list[str], head: str) -> dict[str, str | None]:
     """Choose a conservative automatic baseline using Git-only evidence.
 
     Preference order:
@@ -65,6 +44,7 @@ def discover_baseline(agents_files: list[str], head: str) -> dict[str, str | Non
     3. The repository root commit, which is expensive but avoids silently
        pretending a newer trustworthy boundary exists.
     """
+    git = repo.git
     upstream = git("rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{upstream}", check=False)
     if upstream:
         merge_base = git("merge-base", "HEAD", upstream, check=False)
@@ -104,57 +84,28 @@ def discover_baseline(agents_files: list[str], head: str) -> dict[str, str | Non
     }
 
 
-def changed_files(baseline: str | None) -> list[dict[str, object]]:
-    output = git("diff", "--name-status", f"{baseline}..HEAD") if baseline else git("status", "--short")
-    files: list[dict[str, object]] = []
-    for line in output.splitlines():
-        if not line.strip():
-            continue
-        if baseline:
-            parts = line.split("\t")
-            status, path = parts[0], parts[-1]
-        else:
-            status = line[:2].strip() or "modified"
-            path = line[3:].strip()
-            if " -> " in path:
-                path = path.split(" -> ", 1)[1]
-        files.append({"path": path, "status": status, "signals": classify(path)})
-    return files
-
-
-def working_tree_files() -> list[dict[str, object]]:
-    output = git("status", "--short")
-    files: list[dict[str, object]] = []
-    for line in output.splitlines():
-        if not line.strip():
-            continue
-        status = line[:2].strip() or "modified"
-        path = line[3:].strip()
-        if " -> " in path:
-            path = path.split(" -> ", 1)[1]
-        files.append({"path": path, "status": status, "signals": classify(path)})
-    return files
-
-
 def main() -> int:
     parser = argparse.ArgumentParser(description="Inspect Git evidence relevant to AGENTS.md maintenance")
     parser.add_argument("--baseline", help="Commit, tag, branch, or other Git ref to compare with HEAD")
+    parser.add_argument("--repo", default=".", help="Target repository or a directory within it (default: current directory)")
     args = parser.parse_args()
 
     try:
-        root = Path(git("rev-parse", "--show-toplevel"))
+        repo = GitRepo(args.repo)
+        git = repo.git
+        root = repo.root
+        head = git("rev-parse", "HEAD")
     except RuntimeError as exc:
         print(json.dumps({"error": str(exc)}))
         return 2
 
-    head = git("rev-parse", "HEAD")
     branch = git("branch", "--show-current", check=False) or None
-    agents_files = discover_agents(root)
+    agents_files = repo.agents_files()
 
     if args.baseline:
         try:
             baseline_info = {
-                "sha": resolve_ref(args.baseline),
+                "sha": git("rev-parse", "--verify", f"{args.baseline}^{{commit}}"),
                 "source": "user",
                 "confidence": "explicit",
                 "reason": f"User supplied baseline {args.baseline!r}.",
@@ -163,11 +114,18 @@ def main() -> int:
             print(json.dumps({"error": f"Invalid baseline {args.baseline!r}: {exc}"}))
             return 2
     else:
-        baseline_info = discover_baseline(agents_files, head)
+        baseline_info = discover_baseline(repo, agents_files, head)
 
     baseline_sha = baseline_info["sha"]
-    files = changed_files(baseline_sha)
-    working = working_tree_files()
+
+    def add_signals(items):
+        return [
+            {**item, "signals": sorted(set(classify(item["path"]) + classify(item.get("previousPath", ""))))}
+            for item in items
+        ]
+
+    files = add_signals(repo.changed_files(baseline_sha))
+    working = add_signals(repo.working_tree_files())
     evidence = {
         "repositoryRoot": str(root),
         "branch": branch,

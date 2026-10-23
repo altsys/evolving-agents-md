@@ -35,6 +35,15 @@ Treat `AGENTS.md` as durable operational guidance, not as a changelog or a summa
 
 A useful entry should answer a recurring question for future agents, prevent a likely mistake, or encode a repository constraint that cannot be inferred reliably from the immediate task.
 
+## Script location and target repository
+
+Resolve `<skill-dir>` to the absolute directory containing this `SKILL.md`.
+Resolve `<repo-dir>` to the target checkout (or a directory within it). Invoke the
+bundled scripts by absolute path with `--repo`; do not assume the target contains
+this skill's `scripts/` directory. Both helpers normalize Git operations and
+output paths to the target repository root, regardless of the caller's directory.
+Require Python 3.10+ and Git. Quote paths and refs as shell arguments.
+
 ## Workflow
 
 ### 1. Collect deterministic evidence
@@ -42,16 +51,18 @@ A useful entry should answer a recurring question for future agents, prevent a l
 Run:
 
 ```sh
-python scripts/inspect_repo.py
+python "<skill-dir>/scripts/inspect_repo.py" --repo "<repo-dir>"
 ```
 
 Or, when the user supplied a baseline:
 
 ```sh
-python scripts/inspect_repo.py --baseline <ref>
+python "<skill-dir>/scripts/inspect_repo.py" --repo "<repo-dir>" --baseline "<ref>"
 ```
 
 Consume the structured output. Start with `highSignalFiles` and `workingTreeChanges`, while keeping the complete `changedFiles` list available for context.
+
+Paths are repository-relative. Renames include `previousPath`; inspect both scopes when guidance may have moved. Working-tree entries include staged, unstaged, and individual untracked files.
 
 The inspector identifies where investigation is likely worthwhile. Its signal labels are prioritization hints, not conclusions that `AGENTS.md` must change.
 
@@ -151,12 +162,14 @@ Do not rewrite the whole file for style. Do not reorder stable sections without 
 Run:
 
 ```sh
-python scripts/verify_agents.py
+python "<skill-dir>/scripts/verify_agents.py" --repo "<repo-dir>"
 ```
 
 Then perform semantic verification yourself. For every changed instruction, identify the current repository evidence that supports it. Re-run relevant repository commands when practical. Verify paths and schema/interface claims against current definitions. Check root and nested guidance for contradictions.
 
 If an instruction cannot be supported after verification, remove or revise it before finishing.
+
+After the last validation command, review `git status` and the final diff. Preserve pre-existing user changes. Remove only disposable artifacts created by your own validation, or prevent them when invoking the command. Confirm the final changed-file set before reporting which files changed.
 
 ### 10. Report
 

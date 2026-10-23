@@ -1,0 +1,71 @@
+{
+  "date": "2026-10-23",
+  "baseCommit": "d10773bf7d8a5d15585a44653b8e06cd2979b8ce",
+  "skillSha256": "90e43ec15cc73c6a5133ba9bf7cc8747765f5365ca5ac6556e44460e1176c696",
+  "agent": "Independent ChatGPT Work agents, inherited runtime model; no model override. Exact model build ID was not exposed.",
+  "method": "Fresh isolated repositories and fresh agents. Prompts supplied only the skill path, checkout, task, no-commit constraint, and external report path. Expected outcomes were withheld. Deterministic checks and semantic review performed by the parent agent.",
+  "initialRun": "All six guidance decisions were correct. Two strict changed-file checks failed because test caches remained in the checkout. Added a final status/diff review and artifact-cleanup instruction; reran all six cases in fresh repositories with fresh agents.",
+  "limitations": "One final run per case. These are controlled small Python/Make fixtures, not a cross-model or large-monorepo benchmark. Deterministic checks alone do not establish semantic correctness. Evaluation runs are separate from CI.",
+  "results": [
+    {
+      "case": "changed-command",
+      "ok": true,
+      "errors": [],
+      "semanticReviewRequired": true,
+      "rubric": "Correct stale derived validation guidance using Makefile and CI evidence; preserve maintainer policy. Do not add a changelog.",
+      "agentReport": "AGENTS.md changed: updated the validation instruction from `make test` to `make check`.\n\nEvidence: automatic baseline c716b8bf50fca8b2e3c7e1c6eea9c0845500e051 (last AGENTS.md change) through HEAD 84b474c686dae839e4a8fa3ce57c494c1149252e shows Makefile renaming the test target to check and .github/workflows/test.yml switching CI to make check. Current files corroborate that make check is the supported validation entry point. Future agents will now use the existing command rather than the removed target.\n\nPreserved the maintainer policy, \"Never commit secrets.\"\n\nValidation: verify_agents.py passed without errors or warnings; PYTHONDONTWRITEBYTECODE=1 make check passed (1 test). Final checkout status contains only modified AGENTS.md. No commits were created.\n",
+      "guidanceDiff": "diff --git a/AGENTS.md b/AGENTS.md\nindex 4d270d2..44ce7b2 100644\n--- a/AGENTS.md\n+++ b/AGENTS.md\n@@ -1,7 +1,7 @@\n # Agent guidance\n \n ## Derived repository guidance\n-Run `make test` to validate changes.\n+Run `make check` to validate changes.\n \n ## Maintainer policy\n Never commit secrets.\n",
+      "semanticReview": "pass: claims checked against fixture evidence, scope and preservation reviewed, no unsupported guidance or changelog added"
+    },
+    {
+      "case": "missing-guidance",
+      "ok": true,
+      "errors": [],
+      "semanticReviewRequired": true,
+      "rubric": "Add the newly required validation entry point, corroborated by CI and contributor instructions. Preserve existing policy and keep the edit small.",
+      "agentReport": "AGENTS.md changed; no commit was made.\n\nAdded one instruction to run `make check` before submitting changes. CONTRIBUTING.md explicitly requires this validation entry point, .github/workflows/test.yml invokes it in CI, and Makefile defines it as Python unittest discovery in tests. Recording the shared required command gives future agents an actionable validation requirement. The existing maintainer policy, “Never commit secrets,” was preserved.\n\nInspection used the automatic last-agents-change baseline 0bfa7b60b93af72450597698a83128529767ceae. The initial working tree was clean.\n\nValidation: verify_agents.py passed without errors or warnings; PYTHONDONTWRITEBYTECODE=1 make check passed (1 test). Semantic verification confirmed the instruction against all three current files. Final git status and diff showed only AGENTS.md modified, with the single intended addition and no validation artifacts.\n",
+      "guidanceDiff": "diff --git a/AGENTS.md b/AGENTS.md\nindex 1d2b494..8dd0f84 100644\n--- a/AGENTS.md\n+++ b/AGENTS.md\n@@ -1,2 +1,4 @@\n # Maintainer policy\n Never commit secrets.\n+\n+Run `make check` before submitting changes; it is the shared validation entry point for local development and CI.\n",
+      "semanticReview": "pass: claims checked against fixture evidence, scope and preservation reviewed, no unsupported guidance or changelog added"
+    },
+    {
+      "case": "human-conflict",
+      "ok": true,
+      "errors": [],
+      "semanticReviewRequired": true,
+      "rubric": "Preserve explicit human guidance byte-for-byte, surface its conflict with Makefile and CI, and identify the needed maintainer decision. Do not claim the stale command works.",
+      "agentReport": "AGENTS.md unchanged. No commits made; checkout remains clean.\n\nInspected recent changes using the evolving-agents-md skill and its automatic baseline fdf31148e166fe511365619d54bd936e22e68e41 (last AGENTS.md change).\n\nHuman conflict: AGENTS.md explicitly requires `make test` before submission and explicitly forbids replacing that maintainer instruction based on inferred conventions. Current Makefile renamed the test target to `check`, and .github/workflows/test.yml now invokes `make check`. The supported repository validation path therefore conflicts with explicit human policy. Preserved the maintainer instruction and surfaced the conflict here, as the skill requires. Maintainer resolution is needed: restore the required target or explicitly revise the policy. No contradictory guidance was added.\n\nValidation: verify_agents.py passed without errors or warnings. PYTHONDONTWRITEBYTECODE=1 make check passed (one test). make -n test failed: No rule to make target 'test'. Final git status --short and git diff -- AGENTS.md were empty.\n",
+      "guidanceDiff": "",
+      "semanticReview": "pass: claims checked against fixture evidence, scope and preservation reviewed, no unsupported guidance or changelog added"
+    },
+    {
+      "case": "nested-scope",
+      "ok": true,
+      "errors": [],
+      "semanticReviewRequired": true,
+      "rubric": "Update only services/api/AGENTS.md; make the command location clear and leave root guidance byte-for-byte unchanged.",
+      "agentReport": "AGENTS.md reconciliation completed; no changes committed.\n\nChanged services/api/AGENTS.md only. Replaced the obsolete `make test` instruction with `make check` run from services/api, explicitly scoped to API changes. The current services/api/Makefile defines check (and no test target), and .github/workflows/api.yml corroborates the command and working directory. Future agents will use the supported API validation command without applying it repository-wide.\n\nReviewed changes since automatically discovered baseline 427732a4ab69e0e75fd18cc735af4ba377fc3564 through HEAD 35d01dc9a662153f7c4cab6df71e5f5158aa11da. The initial working tree was clean. Root AGENTS.md and both existing maintainer policies were preserved.\n\nValidation: verify_agents.py passed without warnings; make check passed (one unittest); git diff --check passed. Removed the Python bytecode generated by validation. Final git status contains only the intended modification to services/api/AGENTS.md.\n",
+      "guidanceDiff": "diff --git a/services/api/AGENTS.md b/services/api/AGENTS.md\nindex 4d270d2..c7a848d 100644\n--- a/services/api/AGENTS.md\n+++ b/services/api/AGENTS.md\n@@ -1,7 +1,7 @@\n # Agent guidance\n \n ## Derived repository guidance\n-Run `make test` to validate changes.\n+Run `make check` from `services/api` to validate API changes.\n \n ## Maintainer policy\n Never commit secrets.\n",
+      "semanticReview": "pass: claims checked against fixture evidence, scope and preservation reviewed, no unsupported guidance or changelog added"
+    },
+    {
+      "case": "dependency-bump",
+      "ok": true,
+      "errors": [],
+      "semanticReviewRequired": true,
+      "rubric": "Leave guidance byte-for-byte unchanged; an ordinary dependency patch does not change agent workflow. Explain why no update is needed.",
+      "agentReport": "AGENTS.md unchanged.\n\nUsed evolving-agents-md/SKILL.md and its inspect_repo.py with the automatically discovered baseline 41acdfc0a675b4c4057b93293e5888baead60602 (last applicable AGENTS.md change), compared with HEAD fc002aef6f6e1905b7298d8f935199fdc2176604.\n\nThe only repository change is package.json updating lodash from 4.17.20 to 4.17.21. The current manifest introduces no runtime, package-manager, framework, or canonical-command change. This ordinary dependency patch does not change how future agents should develop or validate the repository, so it produces no durable guidance requiring an edit.\n\nRead root AGENTS.md, package.json, Makefile, and tests/test_smoke.py. Existing guidance to run make test remains supported by the current Makefile and smoke test. Preserved the maintainer policy to never commit secrets.\n\nValidation: verify_agents.py passed without errors or warnings; PYTHONDONTWRITEBYTECODE=1 make test passed (1 test). Final git status --short and git diff were empty. No checkout files changed, no validation artifacts left behind, and no commits created.\n",
+      "guidanceDiff": "",
+      "semanticReview": "pass: claims checked against fixture evidence, scope and preservation reviewed, no unsupported guidance or changelog added"
+    },
+    {
+      "case": "no-change",
+      "ok": true,
+      "errors": [],
+      "semanticReviewRequired": true,
+      "rubric": "Leave guidance byte-for-byte unchanged; the implementation edit creates no durable agent consequence. Report a successful no-change reconciliation.",
+      "agentReport": "AGENTS.md did not change.\n\nUsed the evolving-agents-md skill and its automatically discovered baseline c0c3ecbc8292892089be524c5aa6271800e3bb19 (last AGENTS.md change), comparing with HEAD 7de608b9bc01cf37308807de2c0f71f205a5e184. The working tree was initially clean.\n\nThe only recent change is src/label.py changing LABEL from \"Hello\" to \"Welcome\". This local display value does not change how future agents should edit, navigate, or validate the repository, so it fails the durability and behavior-impact tests for new guidance. No high-signal files or architecture changes were identified.\n\nExisting root guidance remains supported: Makefile defines make test using unittest discovery. Maintainer policy to never commit secrets was preserved. The inspected repository evidence did not produce durable guidance requiring an edit.\n\nValidation: verify_agents.py passed with no errors or warnings; make test passed (one test). Removed only the disposable tests/__pycache__/ directory produced by validation. Final git status and diff are clean. No commits were created.\n",
+      "guidanceDiff": "",
+      "semanticReview": "pass: claims checked against fixture evidence, scope and preservation reviewed, no unsupported guidance or changelog added"
+    }
+  ]
+}
