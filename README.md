@@ -2,7 +2,35 @@
 
 An agent skill that continuously keeps `AGENTS.md` aligned with an evolving codebase.
 
-## Quick start
+## Install with the Skills CLI
+
+Install the skill using the same CLI workflow as `ai-engineering-skills`:
+
+```sh
+npx skills@latest add altsys/evolving-agents-md
+```
+
+Follow the CLI prompts to select the coding agent and installation scope. Keep the installed `SKILL.md` and `scripts/` directory together. The target repository must have Git and Python 3.10+ available.
+
+### Use it in a project
+
+Open the target repository in your coding agent and ask:
+
+```text
+Use the evolving-agents-md skill to inspect this repository and update
+AGENTS.md only where durable guidance is missing or outdated.
+Explain the evidence for each change.
+```
+
+To compare changes against a specific Git baseline:
+
+```text
+Use the evolving-agents-md skill to update AGENTS.md since <commit/tag/branch>.
+```
+
+The skill checks Git history and current repository files, makes targeted guidance edits, and reports when no update is needed. It does not automatically run on every commit; invoke it when you want a review.
+
+## Quick start (manual clone)
 
 Require Python 3.10+, Git, and a coding agent that can read local skill files and run
 commands. The Python helpers use only the standard library.
