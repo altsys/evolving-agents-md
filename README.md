@@ -1,5 +1,7 @@
 # evolving-agents-md
 
+Project overview: [https://hawando.com/projects/evolving-agents-md](https://hawando.com/projects/evolving-agents-md)
+
 An agent skill that continuously keeps `AGENTS.md` aligned with an evolving codebase.
 
 ## Install with the Skills CLI
